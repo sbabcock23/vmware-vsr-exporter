@@ -1,0 +1,31 @@
+groups:
+  - name: vmware-live-site-recovery
+    rules:
+      - alert: VMwareVsrRpoViolation
+        expr: vmware_vsr_replication_rpo_violation == 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "VMware replication RPO breach for {{ $labels.vm }}"
+      - alert: VMwareVsrSyncStale
+        expr: time() - vmware_vsr_replication_last_sync_timestamp_seconds > 2 * vmware_vsr_replication_configured_rpo_seconds
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Replication sync is stale for {{ $labels.vm }}"
+      - alert: VMwareLiveSiteRecoveryIssue
+        expr: sum by (instance, entity_type) (vmware_lsr_issue_active{severity=~"(?i:error|critical"}) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Live Site Recovery has an active issue"
+      - alert: VMwareLiveSiteRecoveryExporterFailing
+        expr: vmware_lsr_exporter_scrape_error == 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Cannot collect VMware Live Site Recovery metrics"

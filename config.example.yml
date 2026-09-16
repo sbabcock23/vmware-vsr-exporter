@@ -1,0 +1,35 @@
+listen_address: 0.0.0.0
+listen_port: 9828
+refresh_interval_seconds: 60
+request_timeout_seconds: 20
+
+instances:
+  # vSphere Replication API. This supplies per-VM RPO, sync, snapshot, and
+  # replication issue metrics.
+  - name: primary-vr
+    url: https://vsr-primary.example.com:8043
+    api_base: /api/rest/vr/v1
+    username: prometheus@vsphere.local
+    password: ${VSR_PRIMARY_PASSWORD}
+    verify_tls: true
+    # For a private CA, mount a PEM bundle and specify its path here.
+    # ca_bundle: /run/secrets/vmware-ca.pem
+    # Overrides only when your appliance/proxy uses non-default routes.
+    login_path: /session
+    collect_replications: true
+    collect_issues: true
+    collect_lsr_health: false
+
+  # Site Recovery Manager / Live Site Recovery API. This supplies protection
+  # group, recovery plan, SRM issue, and task metrics. Use the SRM/VLSR FQDN,
+  # not the VR appliance FQDN, when they are separate appliances.
+  - name: primary-srm
+    url: https://srm-primary.example.com
+    api_base: /api/rest/srm/v1
+    username: prometheus@vsphere.local
+    password: ${SRM_PRIMARY_PASSWORD}
+    verify_tls: true
+    collect_replications: false
+    collect_issues: false
+    collect_lsr_health: true
+    history_days: 7
