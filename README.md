@@ -66,6 +66,10 @@ replications, issues, protection groups, recovery plans, and plan history.
   `vmware_vsr_replication_last_sync_bytes`.
 * `vmware_vsr_replication_sync_bytes_{current,total}`, sync-progress ratio,
   configured point-in-time snapshot count, and snapshot retention.
+* `vmware_vsr_replication_initial_sync_active` and
+  `vmware_vsr_replication_full_sync_active` explicitly identify initial/full
+  synchronization. `vmware_vsr_replication_sync_progress_last_change_timestamp_seconds`
+  makes a stalled seed detectable; its value resets if the exporter restarts.
 * `vmware_vsr_issue_active` and `vmware_lsr_issue_active`.
 * `vmware_lsr_recovery_plan_run` — one sample for each returned execution
   record, labeled with plan and outcome. Use it for recent run/failure views;
@@ -84,7 +88,8 @@ to investigate an active issue after an alert fires.
 
 Example alert rules are in [alerts.yml](alerts.yml). In particular, alert on an
 RPO breach, stale syncs relative to configured RPO, active error-severity
-issues, recovery-plan failures, and exporter scrape failures.
+issues, stalled initial synchronization, recovery-plan failures, and exporter
+scrape failures.
 
 ## API references
 

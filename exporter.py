@@ -108,6 +108,8 @@ class Collector:
         self.lock = threading.Lock()
         self.last_success: dict[str, float] = {}
         self.errors: dict[str, int] = {c.name: 0 for c in configs}
+        # Kept in-memory to identify an initial/full sync that has stopped making progress.
+        self.sync_progress_seen: dict[tuple[str, str, str], tuple[tuple[str, float, float], float]] = {}
 
     def describe(self):
         return []
@@ -131,6 +133,9 @@ class Collector:
             "replication_snapshots": GaugeMetricFamily("vmware_vsr_replication_snapshots", "Configured point-in-time snapshot instances.", labels=["instance", "pairing", "vm"]),
             "replication_snapshot_retention_days": GaugeMetricFamily("vmware_vsr_replication_snapshot_retention_days", "Configured point-in-time snapshot retention.", labels=["instance", "pairing", "vm"]),
             "replication_sync_progress_ratio": GaugeMetricFamily("vmware_vsr_replication_sync_progress_ratio", "Current replication sync progress from 0 to 1.", labels=["instance", "pairing", "vm"]),
+            "replication_initial_sync_active": GaugeMetricFamily("vmware_vsr_replication_initial_sync_active", "Whether a VM is in its initial full synchronization.", labels=["instance", "pairing", "vm"]),
+            "replication_full_sync_active": GaugeMetricFamily("vmware_vsr_replication_full_sync_active", "Whether a VM is performing an initial or subsequent full synchronization.", labels=["instance", "pairing", "vm"]),
+            "replication_sync_progress_last_change_timestamp_seconds": GaugeMetricFamily("vmware_vsr_replication_sync_progress_last_change_timestamp_seconds", "When observed sync state, transferred bytes, or progress last changed; resets when exporter restarts.", labels=["instance", "pairing", "vm"]),
             "replication_option_enabled": GaugeMetricFamily("vmware_vsr_replication_option_enabled", "Whether a replication option is enabled.", labels=["instance", "pairing", "vm", "option"]),
             "replication_error": GaugeMetricFamily("vmware_vsr_replication_error", "Replication reports configuration, group, or recovery error.", labels=["instance", "pairing", "vm", "type"]),
             "vsr_issue_active": GaugeMetricFamily("vmware_vsr_issue_active", "Active vSphere Replication issue.", labels=["instance", "pairing", "severity", "issue_type"]),
@@ -180,10 +185,13 @@ class Collector:
     def replication(self, instance: str, pairing: str, item: dict) -> None:
         vm = str(item.get("name", item.get("vm_id", item.get("id", "unknown"))))
         status = item.get("status", {}) or {}
-        state = str(status.get("status", item.get("configuration_state", "unknown")))
+        # Current APIs use a compound object, but accepting a plain status value
+        # makes this resilient to API-version differences.
+        state_value = status.get("status") if isinstance(status, dict) else status
+        state = str(state_value or item.get("configuration_state", "unknown")).upper()
         labels = [instance, pairing, vm]
         self.add("replication_status", labels + [state], 1)
-        self.add("replication_rpo_violation", labels, truth(status.get("rpo_violation")))
+        self.add("replication_rpo_violation", labels, truth(status.get("rpo_violation") if isinstance(status, dict) else False))
         # The VMware API expresses both RPO fields in minutes.
         self.add("replication_current_rpo_violation_seconds", labels, number(item.get("current_rpo_violation")) * 60)
         self.add("replication_configured_rpo_seconds", labels, number(item.get("rpo")) * 60)
@@ -194,6 +202,14 @@ class Collector:
         self.add("replication_sync_bytes_current", labels, sync.get("transferred_current"))
         self.add("replication_sync_bytes_total", labels, sync.get("transferred_total"))
         self.add("replication_sync_progress_ratio", labels, number(sync.get("progress")) / 100)
+        self.add("replication_initial_sync_active", labels, truth(state == "INITIAL_FULL_SYNC"))
+        self.add("replication_full_sync_active", labels, truth(state in ("INITIAL_FULL_SYNC", "FULL_SYNC")))
+        progress_key = (instance, pairing, vm)
+        progress_value = (state, number(sync.get("progress")), number(sync.get("transferred_current")))
+        previous = self.sync_progress_seen.get(progress_key)
+        changed_at = time.time() if previous is None or previous[0] != progress_value else previous[1]
+        self.sync_progress_seen[progress_key] = (progress_value, changed_at)
+        self.add("replication_sync_progress_last_change_timestamp_seconds", labels, changed_at)
         self.add("replication_snapshots", labels, item.get("mpit_instances"))
         self.add("replication_snapshot_retention_days", labels, item.get("mpit_days"))
         for option in ("quiescing_enabled", "network_compression_enabled", "encryption_enabled",

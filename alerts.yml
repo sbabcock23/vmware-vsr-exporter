@@ -15,6 +15,13 @@ groups:
           severity: warning
         annotations:
           summary: "Replication sync is stale for {{ $labels.vm }}"
+      - alert: VMwareVsrInitialSyncStalled
+        expr: vmware_vsr_replication_initial_sync_active == 1 and time() - vmware_vsr_replication_sync_progress_last_change_timestamp_seconds > 3600
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Initial replication sync has made no progress for more than one hour for {{ $labels.vm }}"
       - alert: VMwareLiveSiteRecoveryIssue
         expr: sum by (instance, entity_type) (vmware_lsr_issue_active{severity=~"(?i:error|critical"}) > 0
         for: 5m
