@@ -51,6 +51,12 @@ sync metrics. For Live Site Recovery/SRM workflow health, use the SRM/VLSR
 appliance and `api_base: /api/rest/srm/v1`. Configure them as two instances
 when they are separate appliances. The login endpoint defaults to `/session`.
 
+To monitor coverage, add `expected_vms` to a vSphere Replication instance.
+These are exact VM display names and are compared against names returned by the
+replication API. The exporter emits `vmware_vsr_expected_vm_protected` for each
+configured name, plus expected and currently-protected totals. Use this for a
+defined workload inventory rather than a large, dynamic VM estate.
+
 The API user needs read-only permissions sufficient to list pairings,
 replications, issues, protection groups, recovery plans, and plan history.
 
@@ -70,6 +76,9 @@ replications, issues, protection groups, recovery plans, and plan history.
   `vmware_vsr_replication_full_sync_active` explicitly identify initial/full
   synchronization. `vmware_vsr_replication_sync_progress_last_change_timestamp_seconds`
   makes a stalled seed detectable; its value resets if the exporter restarts.
+* `vmware_vsr_expected_vm_protected`, `vmware_vsr_expected_vms`, and
+  `vmware_vsr_expected_vms_protected` report required-workload coverage when
+  `expected_vms` is configured.
 * `vmware_vsr_issue_active` and `vmware_lsr_issue_active`.
 * `vmware_lsr_recovery_plan_run` — one sample for each returned execution
   record, labeled with plan and outcome. Use it for recent run/failure views;

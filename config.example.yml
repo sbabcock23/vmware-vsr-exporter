@@ -19,6 +19,11 @@ instances:
     collect_replications: true
     collect_issues: true
     collect_lsr_health: false
+    # Exact VM display names that must remain protected. Omit to disable
+    # coverage monitoring for this instance.
+    expected_vms:
+      - accounting-db01
+      - payroll-app01
 
   # Site Recovery Manager / Live Site Recovery API. This supplies protection
   # group, recovery plan, SRM issue, and task metrics. Use the SRM/VLSR FQDN,

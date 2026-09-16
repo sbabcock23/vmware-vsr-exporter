@@ -22,6 +22,13 @@ groups:
           severity: warning
         annotations:
           summary: "Initial replication sync has made no progress for more than one hour for {{ $labels.vm }}"
+      - alert: VMwareVsrExpectedVmUnprotected
+        expr: vmware_vsr_expected_vm_protected == 0
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Expected VM {{ $labels.vm }} is not currently protected by vSphere Replication"
       - alert: VMwareLiveSiteRecoveryIssue
         expr: sum by (instance, entity_type) (vmware_lsr_issue_active{severity=~"(?i:error|critical"}) > 0
         for: 5m

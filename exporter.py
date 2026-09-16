@@ -7,7 +7,7 @@ import os
 import re
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import requests
@@ -65,6 +65,7 @@ class Instance:
     collect_issues: bool = True
     collect_lsr_health: bool = True
     history_days: int = 7
+    expected_vms: list[str] = field(default_factory=list)
 
 
 class VMwareClient:
@@ -137,6 +138,9 @@ class Collector:
             "replication_full_sync_active": GaugeMetricFamily("vmware_vsr_replication_full_sync_active", "Whether a VM is performing an initial or subsequent full synchronization.", labels=["instance", "pairing", "vm"]),
             "replication_sync_progress_last_change_timestamp_seconds": GaugeMetricFamily("vmware_vsr_replication_sync_progress_last_change_timestamp_seconds", "When observed sync state, transferred bytes, or progress last changed; resets when exporter restarts.", labels=["instance", "pairing", "vm"]),
             "replication_option_enabled": GaugeMetricFamily("vmware_vsr_replication_option_enabled", "Whether a replication option is enabled.", labels=["instance", "pairing", "vm", "option"]),
+            "expected_vm_protected": GaugeMetricFamily("vmware_vsr_expected_vm_protected", "Whether an expected VM is currently discovered as protected by vSphere Replication.", labels=["instance", "vm"]),
+            "expected_vms": GaugeMetricFamily("vmware_vsr_expected_vms", "Configured expected VM count.", labels=["instance"]),
+            "expected_vms_protected": GaugeMetricFamily("vmware_vsr_expected_vms_protected", "Expected VM count currently discovered as protected.", labels=["instance"]),
             "replication_error": GaugeMetricFamily("vmware_vsr_replication_error", "Replication reports configuration, group, or recovery error.", labels=["instance", "pairing", "vm", "type"]),
             "vsr_issue_active": GaugeMetricFamily("vmware_vsr_issue_active", "Active vSphere Replication issue.", labels=["instance", "pairing", "severity", "issue_type"]),
             "lsr_issue_active": GaugeMetricFamily("vmware_lsr_issue_active", "Active Live Site Recovery issue.", labels=["instance", "pairing", "entity_type", "severity", "issue_type"]),
@@ -171,16 +175,26 @@ class Collector:
         client = VMwareClient(config)
         client.login()
         pairings = client.list("/pairings")
+        protected_vms: set[str] = set()
         for pairing in pairings:
             pairing_id = str(pairing.get("id", pairing.get("pairing_id", "unknown")))
             pairing_name = str(pairing.get("name", pairing_id))
             if config.collect_replications:
                 for replication in client.list(f"/pairings/{pairing_id}/replications", extended_info="true", limit=1000):
                     self.replication(config.name, pairing_name, replication)
+                    protected_vms.add(str(replication.get("name", "")))
             if config.collect_issues:
                 self.issues(client, config.name, pairing_id, pairing_name, "/replications/issues", "vsr_issue_active", "replication")
             if config.collect_lsr_health:
                 self.lsr_health(client, config, pairing_id, pairing_name)
+        if config.expected_vms:
+            protected_expected = 0
+            for vm in config.expected_vms:
+                is_protected = vm in protected_vms
+                protected_expected += int(is_protected)
+                self.add("expected_vm_protected", [config.name, vm], truth(is_protected))
+            self.add("expected_vms", [config.name], len(config.expected_vms))
+            self.add("expected_vms_protected", [config.name], protected_expected)
 
     def replication(self, instance: str, pairing: str, item: dict) -> None:
         vm = str(item.get("name", item.get("vm_id", item.get("id", "unknown"))))
@@ -286,6 +300,11 @@ def load_config(filename: str) -> tuple[list[Instance], dict]:
     for data in raw.get("instances", []):
         if not data.get("password"):
             raise ValueError(f"instance {data.get('name', '<unnamed>')} has an empty password")
+        expected_vms = data.get("expected_vms", [])
+        if not isinstance(expected_vms, list) or not all(isinstance(vm, str) and vm for vm in expected_vms):
+            raise ValueError(f"instance {data.get('name', '<unnamed>')} expected_vms must be a list of non-empty VM names")
+        if len(expected_vms) != len(set(expected_vms)):
+            raise ValueError(f"instance {data.get('name', '<unnamed>')} expected_vms contains duplicate VM names")
         if data.get("ca_bundle"):
             data["verify_tls"] = data["ca_bundle"]
         data.setdefault("timeout", default_timeout)
