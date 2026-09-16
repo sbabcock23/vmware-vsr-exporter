@@ -8,7 +8,7 @@ instances:
   # replication issue metrics.
   - name: primary-vr
     url: https://vsr-primary.example.com:8043
-    api_base: /api/rest/vr/v1
+    api_base: /api/rest/vr/v2
     username: prometheus@vsphere.local
     password: ${VSR_PRIMARY_PASSWORD}
     verify_tls: true
