@@ -1,0 +1,38 @@
+name: Publish to Docker Hub
+
+# Trigger the workflow every time code is pushed to the main branch
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+    # 1. Check out the repository code
+    - name: Check out the code
+      uses: actions/checkout@v4
+
+    # 2. Set up Docker Buildx (enables advanced build features)
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    # 3. Log into Docker Hub using the secrets created earlier
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    # 4. Build the image and push it to Docker Hub
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v6
+      with:
+        context: .
+        file: ./Dockerfile
+        push: true
+        # Replace 'your-dockerhub-username' and 'your-repo-name' with your actual setup
+        tags: |
+          ${{ secrets.DOCKERHUB_USERNAME }}/vmware-vsr-exporter:latest
+          ${{ secrets.DOCKERHUB_USERNAME }}/vmware-vsr-exporter:${{ github.sha }}
